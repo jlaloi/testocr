@@ -1,0 +1,188 @@
+<html>
+  <head>
+    <title>Test OCR</title>
+    <script>
+      let start, rectElement, rectangle, img
+      const headers = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      }
+      const getEventPosition = evt => {
+        const {
+          target: {offsetLeft, offsetTop},
+        } = evt
+        const {x, y} = evt
+        return {
+          x,
+          y,
+          offsetLeft,
+          offsetTop,
+        }
+      }
+      const getRect = (x1, y1, x2, y2, offsetLeft = 0, offsetTop = 0) => {
+        const x = Math.min(x1, x2)
+        const y = Math.min(y1, y2)
+        return {
+          x,
+          y,
+          left: x - offsetLeft,
+          top: y - offsetTop,
+          width: Math.max(x1, x2) - x,
+          height: Math.max(y1, y2) - y,
+        }
+      }
+      const setSelectionPos = (left = 0, top = 0, width = 0, height = 0) =>
+        Object.assign(rectElement.style, {
+          display: 'inline',
+          left,
+          top,
+          width,
+          height,
+        })
+      const startSelection = event => {
+        start = getEventPosition(event)
+        setSelectionPos(start.x, start.y)
+      }
+      const endSelection = event => {
+        const {x: x2, y: y2, offsetLeft, offsetTop} = getEventPosition(event)
+        const {left, top, width, height} = getRect(start.x, start.y, x2, y2, offsetLeft, offsetTop)
+        rectangle = {
+          left: left + window.scrollX,
+          top: top + window.scrollY,
+          width,
+          height,
+        }
+        start = null
+      }
+      const moveSelection = event => {
+        if (start) {
+          const {x: x2, y: y2} = getEventPosition(event)
+          const {x, y, width, height} = getRect(start.x, start.y, x2, y2)
+          setSelectionPos(x, y, width, height)
+        }
+      }
+      const fetchImages = async () => {
+        const settings = {
+          method: 'GET',
+          headers,
+        }
+        const fetchResponse = await fetch(`/images`, settings)
+        const images = await fetchResponse.json()
+        return images
+      }
+      const reset = () => {
+        start = null
+        rectangle = undefined
+        rectElement.style.display = 'none'
+      }
+      const ocr = async () => {
+        const settings = {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({img: img.src, rectangle}),
+        }
+        const fetchResponse = await fetch(`/ocr`, settings)
+        const {text} = await fetchResponse.json()
+        document.getElementsByTagName('textarea')[0].value = text
+      }
+      const init = async () => {
+        // Image selection
+        img = document.getElementsByTagName('img')[0]
+        img.addEventListener('mousedown', startSelection)
+        img.addEventListener('mousemove', moveSelection)
+        img.addEventListener('mouseup', endSelection)
+        // Image select
+        const images = await fetchImages()
+        const select = document.getElementsByTagName('select')[0]
+        images.sort().forEach(img => {
+          const option = document.createElement('option')
+          option.appendChild(document.createTextNode(img))
+          option.value = img
+          select.appendChild(option)
+        })
+        if (images && images.length) img.src = select.value
+        select.addEventListener('change', () => (img.src = select.value))
+        // Clipboard past image
+        const blobToBase64 = (blob, callback) =>
+          new Promise(resolve => {
+            const tmpImage = new Image()
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+            tmpImage.onload = function() {
+              canvas.width = this.width
+              canvas.height = this.height
+              ctx.drawImage(tmpImage, 0, 0)
+              resolve(canvas.toDataURL('image/png'))
+            }
+            const URLObj = window.URL || window.webkitURL
+            tmpImage.src = URLObj.createObjectURL(blob)
+          })
+        const getImageFromClipboard = event => {
+          if (event.clipboardData == false || !event.clipboardData.items) return
+          const items = event.clipboardData.items
+          const image = Array.from(items).find(i => i.type.includes('image'))
+          if (image) return image.getAsFile()
+        }
+        const handleClipboard = async e => {
+          const imageBlob = getImageFromClipboard(e)
+          if (imageBlob) {
+            const base64 = await blobToBase64(imageBlob)
+            img.src = base64
+          }
+        }
+        window.addEventListener('paste', handleClipboard, false)
+        // Global
+        rectElement = document.getElementById('rect')
+        document.addEventListener('scroll', reset)
+        reset()
+      }
+    </script>
+    <style>
+      body,
+      textarea {
+        color: #333;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      textarea {
+        width: 2em;
+        height: 2em;
+        bottom: 0.1em;
+        right: 0.1em;
+        position: fixed;
+      }
+      textarea:hover {
+        width: 90%;
+        height: 90%;
+      }
+      button {
+        cursor: pointer;
+        border: 1px solid #444;
+        border-radius: 2px;
+        color: white;
+        background-color: cornflowerblue;
+        text-transform: capitalize;
+      }
+      #actions {
+        position: fixed;
+        top: 0.1em;
+        right: 0.1em;
+      }
+      #rect {
+        border: 2px dashed red;
+        display: none;
+        pointer-events: none;
+        position: fixed;
+      }
+    </style>
+  </head>
+  <body onload="init()">
+    <div id="rect"></div>
+    <img border="0" draggable="false" />
+    <div id="actions">
+      <select></select>
+      <button onclick="ocr()">ocr</button>
+      <button onclick="reset()">reset</button>
+    </div>
+    <textarea></textarea>
+  </body>
+</html>

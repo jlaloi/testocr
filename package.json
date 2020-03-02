@@ -1,0 +1,13 @@
+{
+  "name": "testocr",
+  "description": "",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "julien.laloi@gmail.com",
+  "license": "MIT",
+  "dependencies": {
+    "fastify": "^2.12.1",
+    "fastify-static": "^2.6.0",
+    "tesseract.js": "^2.0.2"
+  }
+}
